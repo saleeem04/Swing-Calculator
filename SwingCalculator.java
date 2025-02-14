@@ -1,103 +1,122 @@
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
+import java.awt.event.*;
+import javax.script.ScriptEngine;
+import javax.script.ScriptEngineManager;
+import javax.script.ScriptException;
 
-public class SwingCalculator {
-    private JFrame frame;
-    private JTextField textField;
-    private String currentInput = "";
-    private double firstNumber;
-    private double secondNumber;
-    private String operator;
+public class SwingCalculator extends JFrame implements ActionListener {
+    private JTextField display;
+    private StringBuilder input;
+    private final ScriptEngine engine;
 
-    public static void main(String[] args) {
-        EventQueue.invokeLater(() -> {
-            try {
-                Calculator window = new Calculator();
-                window.frame.setVisible(true);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        });
-    }
+    public SwingCalculator() {
+        setTitle("Simple Calculator");
+        setSize(300, 400);
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setLayout(new BorderLayout());
 
-    public Calculator() {
-        initialize();
-    }
+        // Initialize script engine for evaluation
+        engine = new ScriptEngineManager().getEngineByName("JavaScript");
+        input = new StringBuilder();
 
-    private void initialize() {
-        frame = new JFrame();
-        frame.setBounds(100, 100, 400, 500);
-        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.getContentPane().setLayout(new BorderLayout());
+        // Display field
+        display = new JTextField();
+        display.setFont(new Font("Arial", Font.BOLD, 24));
+        display.setHorizontalAlignment(JTextField.RIGHT);
+        display.setEditable(false);
+        add(display, BorderLayout.NORTH);
 
-        textField = new JTextField();
-        textField.setEditable(false);
-        textField.setFont(new Font("Arial", Font.PLAIN, 30));
-        frame.getContentPane().add(textField, BorderLayout.NORTH);
-        textField.setColumns(10);
-
-        JPanel panel = new JPanel();
-        frame.getContentPane().add(panel, BorderLayout.CENTER);
-        panel.setLayout(new GridLayout(4, 4, 10, 10));
-      
-        String[] buttonLabels = {
-            "7", "8", "9", "/",
-            "4", "5", "6", "*",
-            "1", "2", "3", "-",
-            "0", ".", "=", "+"
+        // Buttons panel
+        JPanel buttonPanel = new JPanel();
+        buttonPanel.setLayout(new GridLayout(5, 4, 5, 5));
+        String[] buttons = {
+            "7", "8", "9", "/", "C",
+            "4", "5", "6", "*", "√",
+            "1", "2", "3", "-", "^",
+            "0", ".", "=", "+", "(", ")"
         };
 
-        for (String label : buttonLabels) {
-            JButton button = new JButton(label);
-            button.setFont(new Font("Arial", Font.PLAIN, 20));
-            button.addActionListener(new ButtonClickListener());
-            panel.add(button);
+        for (String text : buttons) {
+            JButton button = new JButton(text);
+            button.setFont(new Font("Arial", Font.PLAIN, 18));
+            button.addActionListener(this);
+            buttonPanel.add(button);
+        }
+        add(buttonPanel, BorderLayout.CENTER);
+    }
+
+    @Override
+    public void actionPerformed(ActionEvent e) {
+        String cmd = e.getActionCommand();
+        
+        if (cmd.equals("C")) {
+            input.setLength(0);
+            display.setText("");
+        } else if (cmd.equals("=")) {
+            evaluateExpression();
+        } else if (cmd.equals("√")) {
+            handleSquareRoot();
+        } else if (isValidInput(cmd)) {
+            input.append(cmd);
+            display.setText(input.toString());
         }
     }
 
-    private class ButtonClickListener implements ActionListener {
-        @Override
-        public void actionPerformed(ActionEvent e) {
-            String command = e.getActionCommand();
-
-            if (command.charAt(0) == '=') {                
-                secondNumber = Double.parseDouble(currentInput);
-                switch (operator) {
-                    case "+":
-                        currentInput = String.valueOf(firstNumber + secondNumber);
-                        break;
-                    case "-":
-                        currentInput = String.valueOf(firstNumber - secondNumber);
-                        break;
-                    case "*":
-                        currentInput = String.valueOf(firstNumber * secondNumber);
-                        break;
-                    case "/":
-                        if (secondNumber != 0) {
-                            currentInput = String.valueOf(firstNumber / secondNumber);
-                        } else {
-                            currentInput = "Error";
-                        }
-                        break;
-                }
-                textField.setText(currentInput);
-                operator = null;
-            } else if (command.charAt(0) == '.') {                
-                if (!currentInput.contains(".")) {
-                    currentInput += command;
-                }
-            } else if ("0123456789".contains(command)) {                
-                currentInput += command;
-                textField.setText(currentInput);
-            } else {                
-                if (!currentInput.isEmpty()) {
-                    firstNumber = Double.parseDouble(currentInput);
-                    operator = command;
-                    currentInput = "";
-                }
-            }
+    private boolean isValidInput(String cmd) {
+        if (cmd.matches("[0-9().]")) return true;
+        if (cmd.matches("[+\\-*/^√]")) {
+            return !input.toString().matches(".*[+\\-*/^√]$");
         }
+        return false;
+    }
+
+    private void handleSquareRoot() {
+        try {
+            double value = Double.parseDouble(input.toString());
+            if (value < 0) {
+                display.setText("Error: Negative √");
+            } else {
+                display.setText(String.valueOf(Math.sqrt(value)));
+                input.setLength(0);
+                input.append(Math.sqrt(value));
+            }
+        } catch (NumberFormatException ex) {
+            display.setText("Invalid Input");
+        }
+    }
+
+    private void evaluateExpression() {
+        try {
+            String expression = input.toString().replace("^", "**");
+            if (!isBalanced(expression)) {
+                display.setText("Error: Unbalanced parentheses");
+                return;
+            }
+            Object result = engine.eval(expression);
+            if (result.toString().equals("Infinity")) {
+                display.setText("Error: Division by zero");
+            } else {
+                display.setText(result.toString());
+                input.setLength(0);
+                input.append(result.toString());
+            }
+        } catch (ScriptException ex) {
+            display.setText("Error: Invalid expression");
+        }
+    }
+
+    private boolean isBalanced(String expression) {
+        int count = 0;
+        for (char c : expression.toCharArray()) {
+            if (c == '(') count++;
+            if (c == ')') count--;
+            if (count < 0) return false;
+        }
+        return count == 0;
+    }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> new SwingCalculator().setVisible(true));
     }
 }
